@@ -1,0 +1,367 @@
+// WhatsApp Business Management System - Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["whatsapp-app"]
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+enum UserRole {
+  OWNER
+  STAFF
+
+  @@schema("whatsapp-app")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // Hashed with bcrypt
+  name      String
+  role      UserRole @default(STAFF)
+
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Activity tracking
+  createdOrders Order[] @relation("OrderCreatedBy")
+
+  @@index([businessId])
+  @@index([email])
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// BUSINESS (Multi-tenancy ready)
+// ============================================
+
+model Business {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?
+  address     String?
+  currency    String   @default("USD") // USD, LBP
+
+  // WhatsApp settings
+  whatsappNumber String?
+  whatsappApiKey String? // For future WhatsApp Business API
+
+  users          User[]
+  products       Product[]
+  customers      Customer[]
+  orders         Order[]
+  conversations  Conversation[]
+  messages       Message[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// PRODUCTS / INVENTORY
+// ============================================
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  nameAr      String?  // Arabic name (future)
+  description String?
+
+  // Pricing
+  price       Decimal  @db.Decimal(10, 2) // Supports 99,999,999.99
+  cost        Decimal? @db.Decimal(10, 2) // Purchase cost (for profit calc)
+
+  // Inventory
+  quantity    Int      @default(0)
+  lowStockThreshold Int @default(10)
+
+  // Metadata
+  sku         String?  @unique // Stock Keeping Unit
+  barcode     String?  @unique // For barcode scanning (future)
+  imageUrl    String?
+  category    String?  // "Electronics", "Food", "Clothing", etc.
+
+  // Relationships
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  orderItems  OrderItem[]
+
+  isActive    Boolean  @default(true) // Soft delete
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([businessId])
+  @@index([name])
+  @@index([category])
+  @@index([quantity]) // For low stock queries
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// CUSTOMERS
+// ============================================
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String   // WhatsApp number
+  email       String?
+  address     String?
+
+  // Computed fields (updated by triggers/app logic)
+  totalOrders Int      @default(0)
+  totalSpent  Decimal  @db.Decimal(10, 2) @default(0)
+
+  // Relationships
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  orders         Order[]
+  conversations  Conversation[]
+
+  notes       String?  // Special notes (allergies, preferences)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([businessId, phone]) // Prevent duplicate phone per business
+  @@index([businessId])
+  @@index([name])
+  @@index([phone])
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// ORDERS
+// ============================================
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+
+  @@schema("whatsapp-app")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  WHATSAPP_PAY // Future: WhatsApp Pay integration
+
+  @@schema("whatsapp-app")
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIAL
+
+  @@schema("whatsapp-app")
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  orderNumber String   @unique // Human-readable: ORD-20240128-001
+
+  // Customer relationship
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+
+  // Order items
+  items       OrderItem[]
+
+  // Pricing
+  subtotal    Decimal  @db.Decimal(10, 2)
+  tax         Decimal  @db.Decimal(10, 2) @default(0)
+  discount    Decimal  @db.Decimal(10, 2) @default(0)
+  deliveryFee Decimal  @db.Decimal(10, 2) @default(0)
+  total       Decimal  @db.Decimal(10, 2)
+
+  // Status tracking
+  status      OrderStatus @default(PENDING)
+
+  // Payment
+  paymentMethod PaymentMethod @default(CASH)
+  paymentStatus PaymentStatus @default(UNPAID)
+  paidAmount    Decimal  @db.Decimal(10, 2) @default(0)
+
+  // Metadata
+  notes       String?  // Special instructions
+  deliveryAddress String?
+
+  // WhatsApp tracking
+  whatsappMessageId String? // Link to original WhatsApp message (future)
+  importedFromWhatsapp Boolean @default(false)
+
+  // Relationships
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User     @relation("OrderCreatedBy", fields: [createdById], references: [id])
+
+  messages    Message[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime? // When order was delivered/completed
+
+  @@index([businessId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([orderNumber])
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// ORDER ITEMS (Line Items)
+// ============================================
+
+model OrderItem {
+  id          String   @id @default(cuid())
+
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+
+  // Snapshot at time of order (prices may change)
+  productName String   // Product name at time of order
+  quantity    Int
+  pricePerUnit Decimal @db.Decimal(10, 2)
+  subtotal    Decimal  @db.Decimal(10, 2) // quantity * pricePerUnit
+
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// WHATSAPP MESSAGING
+// ============================================
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+
+  @@schema("whatsapp-app")
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("whatsapp-app")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  DOCUMENT
+
+  @@schema("whatsapp-app")
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+
+  @@schema("whatsapp-app")
+}
+
+model Conversation {
+  id              String             @id @default(cuid())
+  whatsappNumber  String
+  name            String?
+
+  lastMessageAt   DateTime           @default(now())
+  unreadCount     Int                @default(0)
+  status          ConversationStatus @default(OPEN)
+
+  businessId      String
+  business        Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  customerId      String?
+  customer        Customer?          @relation(fields: [customerId], references: [id])
+
+  messages        Message[]
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@unique([businessId, whatsappNumber])
+  @@index([businessId])
+  @@index([lastMessageAt])
+  @@schema("whatsapp-app")
+}
+
+model Message {
+  id                String           @id @default(cuid())
+  content           String
+  direction         MessageDirection
+  messageType       MessageType      @default(TEXT)
+  whatsappMessageId String?          @unique
+  status            MessageStatus    @default(SENT)
+
+  conversationId    String
+  conversation      Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  businessId        String
+  business          Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  orderId           String?
+  order             Order?           @relation(fields: [orderId], references: [id])
+
+  createdAt         DateTime         @default(now())
+
+  @@index([conversationId])
+  @@index([businessId])
+  @@index([createdAt])
+  @@schema("whatsapp-app")
+}
+
+// ============================================
+// AUDIT LOG (Future enhancement)
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String   // "CREATE_ORDER", "UPDATE_PRODUCT", etc.
+  entityType  String   // "Order", "Product", etc.
+  entityId    String
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@schema("whatsapp-app")
+}
