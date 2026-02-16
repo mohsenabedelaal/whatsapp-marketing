@@ -6,7 +6,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  schemas  = ["whatsapp-app"]
+  schemas  = ["public"]
 }
 
 // ============================================
@@ -17,7 +17,7 @@ enum UserRole {
   OWNER
   STAFF
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 model User {
@@ -38,7 +38,7 @@ model User {
 
   @@index([businessId])
   @@index([email])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -67,7 +67,7 @@ model Business {
   updatedAt   DateTime @updatedAt
 
   @@index([name])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -108,7 +108,7 @@ model Product {
   @@index([name])
   @@index([category])
   @@index([quantity]) // For low stock queries
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -142,7 +142,7 @@ model Customer {
   @@index([businessId])
   @@index([name])
   @@index([phone])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -157,7 +157,7 @@ enum OrderStatus {
   DELIVERED
   CANCELLED
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 enum PaymentMethod {
@@ -166,7 +166,7 @@ enum PaymentMethod {
   BANK_TRANSFER
   WHATSAPP_PAY // Future: WhatsApp Pay integration
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 enum PaymentStatus {
@@ -174,7 +174,7 @@ enum PaymentStatus {
   PAID
   PARTIAL
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 model Order {
@@ -229,7 +229,7 @@ model Order {
   @@index([status])
   @@index([createdAt])
   @@index([orderNumber])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -255,7 +255,7 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -266,14 +266,14 @@ enum ConversationStatus {
   OPEN
   CLOSED
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 enum MessageDirection {
   INBOUND
   OUTBOUND
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 enum MessageType {
@@ -281,7 +281,7 @@ enum MessageType {
   IMAGE
   DOCUMENT
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 enum MessageStatus {
@@ -290,7 +290,7 @@ enum MessageStatus {
   READ
   FAILED
 
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 model Conversation {
@@ -316,7 +316,7 @@ model Conversation {
   @@unique([businessId, whatsappNumber])
   @@index([businessId])
   @@index([lastMessageAt])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 model Message {
@@ -341,7 +341,7 @@ model Message {
   @@index([conversationId])
   @@index([businessId])
   @@index([createdAt])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
 
 // ============================================
@@ -363,5 +363,5 @@ model AuditLog {
   @@index([userId])
   @@index([entityType, entityId])
   @@index([createdAt])
-  @@schema("whatsapp-app")
+  @@schema("public")
 }
